@@ -313,21 +313,13 @@
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				FRAMEWORK_SEARCH_PATHS = "";
 				GENERATE_INFOPLIST_FILE = YES;
-				HEADER_SEARCH_PATHS = (
-					"/Python.xcframework/macos-arm64_x86_64/Python.framework/Versions/3.13",
-					"/Python.xcframework/macos-arm64_x86_64/Python.framework/Versions/3.13/include",
-				);
+				HEADER_SEARCH_PATHS = "";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				LIBRARY_SEARCH_PATHS = (
-					"$(inherited)",
-					"$(PROJECT_DIR)/mac_apt_lib/python-stdlib/site-packages/PIL/.dylibs",
-					"$(PROJECT_DIR)/mac_apt_lib/python-stdlib/site-packages/cryptography/hazmat/bindings",
-					"$(PROJECT_DIR)/mac_apt_lib/python-stdlib/site-packages/cramjam",
-				);
+				LIBRARY_SEARCH_PATHS = "$(inherited)";
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.purelogics.RunPython;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -353,21 +345,13 @@
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				FRAMEWORK_SEARCH_PATHS = "";
 				GENERATE_INFOPLIST_FILE = YES;
-				HEADER_SEARCH_PATHS = (
-					"/Python.xcframework/macos-arm64_x86_64/Python.framework/Versions/3.13",
-					"/Python.xcframework/macos-arm64_x86_64/Python.framework/Versions/3.13/include",
-				);
+				HEADER_SEARCH_PATHS = "";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				LIBRARY_SEARCH_PATHS = (
-					"$(inherited)",
-					"$(PROJECT_DIR)/mac_apt_lib/python-stdlib/site-packages/PIL/.dylibs",
-					"$(PROJECT_DIR)/mac_apt_lib/python-stdlib/site-packages/cryptography/hazmat/bindings",
-					"$(PROJECT_DIR)/mac_apt_lib/python-stdlib/site-packages/cramjam",
-				);
+				LIBRARY_SEARCH_PATHS = "$(inherited)";
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.purelogics.RunPython;
 				PRODUCT_NAME = "$(TARGET_NAME)";
