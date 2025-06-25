@@ -1,0 +1,3 @@
+Original path was
+
+/Users/purelogics-2259/Developer/Python-Apple-support/dist/Python-3.12-macOS-support.custom/Python.xcframework/macos-arm64_x86_64/Python.framework/Python
