@@ -8,78 +8,141 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
-struct ContentView: View {
-    @State private var inputPath: String = ""
-    @State private var outputPath: String = ""
-    @State private var isRunning: Bool = false
-    @State private var logText: String = ""
+class ViewModel: ObservableObject {
+    @Published var inputPath: String = ""
+    @Published var outputPath: String = ""
+    @Published var isRunning: Bool = false
+    @Published var logText: String = ""
     let pythonQueue = DispatchQueue(label: "com.runpython.pythonQueue")
-
-    init() {
-        guard let stdLibPath = Bundle.main.path(forResource: "python-stdlib", ofType: nil),
-              let libDynloadPath = Bundle.main.path(forResource: "python-stdlib/lib-dynload", ofType: nil),
-              let iLeapLib = Bundle.main.path(forResource: "iLEAPP", ofType: nil) else { return }
-        
-        setenv("PYTHONHOME", stdLibPath, 1)
-        setenv("PYTHONPATH", "\(stdLibPath):\(libDynloadPath):\(iLeapLib):\(iLeapLib)/venv/lib/python3.12/site-packages", 1)
-        
-        Py_Initialize()
-        
-        let pyVersionScript = """
-            import sys
-            print(f"Python version: {sys.version}")
-            """
-        PyRun_SimpleString(pyVersionScript)
-    }
     
     func runIleappInBackground() {
         isRunning = true
-        logText = ""
+        logText = "runIleappInBackground start"
         
-        pythonQueue.sync {
-//            redirectPythonStdout { outputLine in
-//                DispatchQueue.main.async {
-//                    logText.append(contentsOf: outputLine + "\n")
-//                }
-//            }
-            
-            let gstate = PyGILState_Ensure()
+        let ileappPath = "\(Bundle.main.resourcePath!)/iLEAPP/ileapp.py"
+        if !FileManager.default.fileExists(atPath: ileappPath) {
+            print("\n❌ ileapp.py not found at path: \(ileappPath)")
+            logText += "\n❌ ileapp.py not found at path: \(ileappPath)"
+        } else {
+            print("\n✅ ileapp.py exists.")
+            logText += "\n✅ ileapp.py exists."
+        }
 
-            let argvList = [
-                "ileapp.py",
-                "-t", "itunes",
-                "-i", inputPath,
-                "-o", outputPath
-            ]
-            let argvCode = "import sys; sys.argv = \(argvList)"
-            PyRun_SimpleString(argvCode)
+        pythonQueue.sync {
             
-            let runCode = """
-                import ileapp
-                ileapp.main()
-                """
-            PyRun_SimpleString(runCode)
-            
-            PyGILState_Release(gstate)  // Release GIL
+//            let gstate = PyGILState_Ensure()
+//
+//            let argvList = [
+//                "ileapp.py",
+//                "-t", "itunes",
+//                "-i", self.inputPath,
+//                "-o", self.outputPath
+//            ]
+//            let argvCode = "import sys; sys.argv = \(argvList)"
+//            PyRun_SimpleString(argvCode)
+//            
+//            let runCode = """
+//                import ileapp
+//                ileapp.main()
+//                """
+//            PyRun_SimpleString(runCode)
+//            if PyErr_Occurred() != nil {
+//                PyErr_Print()
+//            }
+//            
+//            PyGILState_Release(gstate)  // Release GIL
+
+            let ileappPath = "\(Bundle.main.resourcePath!)/iLEAPP/ileapp.py"
+            let input = self.inputPath
+            let output = self.outputPath
+
+            let setupAndRun = """
+            import sys, traceback
+            try:
+                sys.argv = ['ileapp.py', '-t', 'itunes', '-i', '\(input)', '-o', '\(output)']
+                exec(open('\(ileappPath)').read())
+            except Exception:
+                with open('/tmp/ileapp_error.txt', 'w') as f:
+                    traceback.print_exc(file=f)
+            """
+
+            PyRun_SimpleString(setupAndRun)
+
+            // Read Python error log
+            let errorLog = try? String(contentsOfFile: "/tmp/ileapp_error.txt")
 
             DispatchQueue.main.async {
-                isRunning = false
+                self.isRunning = false
+                self.logText = "runIleappInBackground end\n\n\(errorLog ?? "")"
             }
         }
     }
+    
+    func loadStartupLog() {
+        let supportPath = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+        let logPath = supportPath.appendingPathComponent("RunPython/startup_log.txt")
+
+        if let log = try? String(contentsOf: logPath) {
+            DispatchQueue.main.async {
+                self.logText = log
+            }
+        } else {
+            self.logText = "Log file not found."
+        }
+    }
+}
+
+struct ContentView: View {
+    
+    @StateObject var vm = ViewModel()
+    
+    init() {
+        guard let bundlePath = Bundle.main.resourcePath else { return }
+        
+        let stdLibPath = bundlePath + "/python-stdlib"
+        let libDynloadPath = stdLibPath + "/lib-dynload"
+        let iLeapLib = bundlePath + "/iLEAPP"
+        let sitePackages = iLeapLib + "/venv/lib/python3.12/site-packages"
+        
+        setenv("PYTHONHOME", stdLibPath, 1)
+        setenv("PYTHONPATH", "\(stdLibPath):\(libDynloadPath):\(iLeapLib):\(sitePackages)", 1)
+        
+        Py_Initialize()
+        
+        // Redirect stdout to a file or buffer you can read
+        let captureLog = """
+        import sys, os
+        import io
+
+        log = io.StringIO()
+        sys.stdout = log
+        sys.stderr = log
+
+        print("Python version:", sys.version)
+        print("PYTHONHOME =", os.environ.get("PYTHONHOME"))
+        print("PYTHONPATH =", os.environ.get("PYTHONPATH"))
+        print("sys.path =", sys.path)
+
+        os.makedirs(os.path.expanduser('~/Library/Application Support/RunPython'), exist_ok=True)
+        with open(os.path.expanduser('~/Library/Application Support/RunPython/startup_log.txt'), 'w') as f:
+            f.write(log.getvalue())
+        """
+        PyRun_SimpleString(captureLog)
+    }
+
     
     var body: some View {
         VStack(spacing: 20) {
             GroupBox(label: Text("Input Directory")) {
                 HStack {
-                    Text(inputPath.isEmpty ? "No folder selected" : inputPath)
+                    Text(vm.inputPath.isEmpty ? "No folder selected" : vm.inputPath)
                         .lineLimit(1)
                         .truncationMode(.middle)
                     Spacer()
                     Button("Select") {
                         selectDirectory { path in
                             if let path = path {
-                                inputPath = path
+                                vm.inputPath = path
                             }
                         }
                     }
@@ -88,14 +151,14 @@ struct ContentView: View {
             
             GroupBox(label: Text("Output Directory")) {
                 HStack {
-                    Text(outputPath.isEmpty ? "No folder selected" : outputPath)
+                    Text(vm.outputPath.isEmpty ? "No folder selected" : vm.outputPath)
                         .lineLimit(1)
                         .truncationMode(.middle)
                     Spacer()
                     Button("Select") {
                         selectDirectory { path in
                             if let path = path {
-                                outputPath = path
+                                vm.outputPath = path
                             }
                         }
                     }
@@ -103,17 +166,17 @@ struct ContentView: View {
             }
             
             Button(action: {
-                guard !inputPath.isEmpty && !outputPath.isEmpty else { return }
-                runIleappInBackground()
+                guard !vm.inputPath.isEmpty && !vm.outputPath.isEmpty else { return }
+                vm.runIleappInBackground()
             }) {
-                Text(isRunning ? "Running..." : "Start iLEAPP")
+                Text(vm.isRunning ? "Running..." : "Start iLEAPP")
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)
-            .disabled(isRunning || inputPath.isEmpty || outputPath.isEmpty)
+            .disabled(vm.isRunning || vm.inputPath.isEmpty || vm.outputPath.isEmpty)
             
             ScrollView {
-                Text(logText)
+                Text(vm.logText)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding()
             }
@@ -123,6 +186,9 @@ struct ContentView: View {
         }
         .padding()
         .frame(width: 600)
+        .onAppear {
+            vm.loadStartupLog()
+        }
     }
     
     private func selectDirectory(completion: @escaping (String?) -> Void) {
@@ -139,21 +205,6 @@ struct ContentView: View {
         }
     }
     
-    func redirectPythonStdout(onLine: @escaping (String) -> Void) {
-        let pipe = Pipe()
-        let fileHandle = pipe.fileHandleForReading
-        dup2(pipe.fileHandleForWriting.fileDescriptor, fileno(stdout))
-        dup2(pipe.fileHandleForWriting.fileDescriptor, fileno(stderr))
-        
-        fileHandle.readabilityHandler = { handle in
-            let data = handle.availableData
-            if let output = String(data: data, encoding: .utf8) {
-                output.split(separator: "\n").forEach { line in
-                    onLine(String(line))
-                }
-            }
-        }
-    }
 }
 
 #Preview {
