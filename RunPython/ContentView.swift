@@ -16,35 +16,42 @@ class ViewModel: ObservableObject {
     @Published var logText: String = ""
     
     func runIleappInBackground() {
+        DispatchQueue.main.async {
+            self.isRunning = true
+            self.logText = "▶️ iLEAPP started..."
+        }
+        
         let process = Process()
         process.executableURL = Bundle.main.url(forResource: "iLEAPP/dist/ileapp", withExtension: nil)
         process.arguments = ["-t", "itunes", "-i", inputPath, "-o", outputPath]
-
+        
+        // Optional: capture logs
         let outputPipe = Pipe()
-        let errorPipe = Pipe()
         process.standardOutput = outputPipe
-        process.standardError = errorPipe
-        // abc
-        do {
-            try process.run()
+        process.standardError = outputPipe
+        
+        // Process termination callback
+        process.terminationHandler = { proc in
+            let output = String(data: outputPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
             
-            let outputData = outputPipe.fileHandleForReading.readDataToEndOfFile()
-            let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
-            
-            process.waitUntilExit()
-            
-            let output = String(data: outputData, encoding: .utf8) ?? ""
-            let error = String(data: errorData, encoding: .utf8) ?? ""
-            
-            print("Output: \(output)")
-            print("Error: \(error)")
-            print("Exit code: \(process.terminationStatus)")
-            logText = "Output: \(output) \n Error: \(error) \n Exit code: \(process.terminationStatus)"
-        } catch {
-            print("Error running process: \(error)")
-            logText = "Error running process: \(error)"
+            DispatchQueue.main.async {
+                self.isRunning = false
+                self.logText += "\n✅ iLEAPP finished (exit code: \(proc.terminationStatus))\n\(output)"
+            }
+        }
+        
+        DispatchQueue.global(qos: .userInitiated).async {
+            do {
+                try process.run()
+            } catch {
+                DispatchQueue.main.async {
+                    self.isRunning = false
+                    self.logText += "\n❌ Error: \(error.localizedDescription)"
+                }
+            }
         }
     }
+
 //    {
 //        isRunning = true
 //        logText = "runIleappInBackground start"
