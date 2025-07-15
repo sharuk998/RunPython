@@ -4,7 +4,7 @@
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 APP_PATH="$SCRIPT_DIR"
-CERT="Apple Distribution: The App Dynamics LLC (65G85Y9KN7)"
+CERT="Developer ID Application: SUMURI LLC (M2UAN8S5M3)"
 
 echo "🧹 Cleaning up unnecessary files..."
 
