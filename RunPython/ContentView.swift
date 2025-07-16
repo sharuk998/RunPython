@@ -15,13 +15,17 @@ class ViewModel: ObservableObject {
     @Published var isRunning: Bool = false
     @Published var logText: String = ""
     
+    @Published var progress = 0.0
+    @Published var progressText: String = ""
+    
+    var process = Process()
+    
     func runIleappInBackground() {
         DispatchQueue.main.async {
             self.isRunning = true
             self.logText = "▶️ iLEAPP started..."
         }
         
-        let process = Process()
         process.executableURL = Bundle.main.url(forResource: "iLEAPP/dist/ileapp", withExtension: nil)
         process.arguments = ["-t", "itunes", "-i", inputPath, "-o", outputPath]
         
@@ -29,7 +33,29 @@ class ViewModel: ObservableObject {
         let outputPipe = Pipe()
         process.standardOutput = outputPipe
         process.standardError = outputPipe
+        // Observe logs
+        let outputHandler = outputPipe.fileHandleForReading
+        outputHandler.waitForDataInBackgroundAndNotify()
         
+        var dataObserver: NSObjectProtocol!
+        let notificationCenter = NotificationCenter.default
+        let dataNotificationName = NSNotification.Name.NSFileHandleDataAvailable
+        dataObserver = notificationCenter.addObserver(forName: dataNotificationName, object: outputHandler, queue: nil) {  notification in
+            let data = outputHandler.availableData
+            guard data.count > 0 else {
+                notificationCenter.removeObserver(dataObserver!)
+                return
+            }
+            if let line = String(data: data, encoding: .utf8) {
+                self.updateProgress(from: line)
+                
+                print("Output -> \(line)")
+                DispatchQueue.main.async {
+                    self.logText = self.logText + line
+                }
+            }
+            outputHandler.waitForDataInBackgroundAndNotify()
+        }
         // Process termination callback
         process.terminationHandler = { proc in
             let output = String(data: outputPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
@@ -42,7 +68,7 @@ class ViewModel: ObservableObject {
         
         DispatchQueue.global(qos: .userInitiated).async {
             do {
-                try process.run()
+                try self.process.run()
             } catch {
                 DispatchQueue.main.async {
                     self.isRunning = false
@@ -51,131 +77,38 @@ class ViewModel: ObservableObject {
             }
         }
     }
-
-//    {
-//        isRunning = true
-//        logText = "runIleappInBackground start"
-//        
-//        let ileappPath = "\(Bundle.main.resourcePath!)/iLEAPP/ileapp.py"
-//        if !FileManager.default.fileExists(atPath: ileappPath) {
-//            print("\n❌ ileapp.py not found at path: \(ileappPath)")
-//            logText += "\n❌ ileapp.py not found at path: \(ileappPath)"
-//        } else {
-//            print("\n✅ ileapp.py exists.")
-//            logText += "\n✅ ileapp.py exists."
-//        }
-//
-//        pythonQueue.sync {
-//            
-////            let gstate = PyGILState_Ensure()
-////
-////            let argvList = [
-////                "ileapp.py",
-////                "-t", "itunes",
-////                "-i", self.inputPath,
-////                "-o", self.outputPath
-////            ]
-////            let argvCode = "import sys; sys.argv = \(argvList)"
-////            PyRun_SimpleString(argvCode)
-////            
-////            let runCode = """
-////                import ileapp
-////                ileapp.main()
-////                """
-////            PyRun_SimpleString(runCode)
-////            if PyErr_Occurred() != nil {
-////                PyErr_Print()
-////            }
-////            
-////            PyGILState_Release(gstate)  // Release GIL
-//
-//            let ileappPath = "\(Bundle.main.resourcePath!)/iLEAPP/ileapp.py"
-//            let input = self.inputPath
-//            let output = self.outputPath
-//
-//            let setupAndRun = """
-//            import sys, traceback
-//            try:
-//                sys.argv = ['ileapp.py', '-t', 'itunes', '-i', '\(input)', '-o', '\(output)']
-//                exec(open('\(ileappPath)').read())
-//            except Exception:
-//                with open('/tmp/ileapp_error.txt', 'w') as f:
-//                    traceback.print_exc(file=f)
-//            """
-//
-//            PyRun_SimpleString(setupAndRun)
-//
-//            // Read Python error log
-//            let errorLog = try? String(contentsOfFile: "/tmp/ileapp_error.txt")
-//
-//            DispatchQueue.main.async {
-//                self.isRunning = false
-//                self.logText = "runIleappInBackground end\n\n\(errorLog ?? "")"
-//            }
-//        }
-//    }
     
-    func loadStartupLog() {
-        let supportPath = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-        let logPath = supportPath.appendingPathComponent("RunPython/startup_log.txt")
+    func updateProgress(from line: String) {
+        // Use regex to match all patterns like: [123/427]
+        let pattern = #"\[(\d+)/(\d+)\]"#
+        let regex = try? NSRegularExpression(pattern: pattern)
 
-        if let log = try? String(contentsOf: logPath) {
+        let matches = regex?.matches(in: line, range: NSRange(line.startIndex..., in: line)) ?? []
+
+        guard let lastMatch = matches.last else { return }
+
+        // Extract numbers from the last match
+        if let currentRange = Range(lastMatch.range(at: 1), in: line),
+           let totalRange = Range(lastMatch.range(at: 2), in: line),
+           let current = Int(line[currentRange]),
+           let total = Int(line[totalRange]),
+           total > 0
+        {
             DispatchQueue.main.async {
-                self.logText = log
+                self.progress = Double(current) / Double(total)
+                self.progressText = "\(current)/\(total)"
             }
-        } else {
-            self.logText = "Log file not found."
         }
     }
+
+
 }
 
 struct ContentView: View {
     
     @StateObject var vm = ViewModel()
     
-    init() {
-//        guard let bundlePath = Bundle.main.resourcePath else { return }
-//        let bundlePath1 = Bundle.main.bundlePath
-//
-//        let stdLibPath = bundlePath + "/python-stdlib"
-//        let libDynloadPath = stdLibPath + "/lib-dynload"
-//        let iLeapLib = bundlePath + "/iLEAPP"
-//        let sitePackages = iLeapLib + "/venv/lib/python3.12/site-packages"
-//        let dyldPath = bundlePath1 + "/Contents/Resources/Python.framework/Versions/3.12/Python"
-//        
-//        setenv("PYTHONHOME", stdLibPath, 1)
-//        setenv("PYTHONPATH", "\(stdLibPath):\(libDynloadPath):\(iLeapLib):\(sitePackages)", 1)
-//        setenv("DYLD_LIBRARY_PATH", dyldPath, 1)
-//        
-//        dlopen(dyldPath, RTLD_GLOBAL | RTLD_LAZY)
-//        
-//        if dlopen(dyldPath, RTLD_GLOBAL | RTLD_LAZY) == nil {
-//            let err = String(cString: dlerror())
-//            print("❌ dlopen failed: \(err)")
-//        }
-//
-//        Py_Initialize()
-//        
-//        // Redirect stdout to a file or buffer you can read
-//        let captureLog = """
-//        import sys, os
-//        import io
-//
-//        log = io.StringIO()
-//        sys.stdout = log
-//        sys.stderr = log
-//
-//        print("Python version:", sys.version)
-//        print("PYTHONHOME =", os.environ.get("PYTHONHOME"))
-//        print("PYTHONPATH =", os.environ.get("PYTHONPATH"))
-//        print("sys.path =", sys.path)
-//
-//        os.makedirs(os.path.expanduser('~/Library/Application Support/RunPython'), exist_ok=True)
-//        with open(os.path.expanduser('~/Library/Application Support/RunPython/startup_log.txt'), 'w') as f:
-//            f.write(log.getvalue())
-//        """
-//        PyRun_SimpleString(captureLog)
-    }
+    init() {}
 
     
     var body: some View {
@@ -212,30 +145,56 @@ struct ContentView: View {
                 }
             }
             
-            Button(action: {
+            if vm.isRunning {
+                VStack(alignment: .leading) {
+                    ProgressView(value: vm.progress)
+                        .progressViewStyle(.linear)
+                    Text("Progress: \(vm.progressText)")
+                        .font(.caption)
+                        .foregroundColor(.gray)
+                }
+                .padding(.vertical)
+            }
+
+            Button {
                 guard !vm.inputPath.isEmpty && !vm.outputPath.isEmpty else { return }
                 vm.runIleappInBackground()
-            }) {
+            } label: {
                 Text(vm.isRunning ? "Running..." : "Start iLEAPP")
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)
             .disabled(vm.isRunning || vm.inputPath.isEmpty || vm.outputPath.isEmpty)
             
-            ScrollView {
-                Text(vm.logText)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding()
+            Button {
+                vm.process.terminate()
+            } label: {
+                Text("Cancel")
+                    .frame(maxWidth: .infinity)
             }
-            .frame(height: 250)
+            
+            ScrollViewReader { proxy in
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(vm.logText)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .id("bottom")
+                    }
+                    .padding()
+                }
+                .frame(height: 250)
+                .onChange(of: vm.logText) {
+                    withAnimation {
+                        proxy.scrollTo("bottom", anchor: .bottom)
+                    }
+                }
+            }
+
             
             Spacer()
         }
         .padding()
         .frame(width: 600)
-        .onAppear {
-            vm.loadStartupLog()
-        }
     }
     
     private func selectDirectory(completion: @escaping (String?) -> Void) {
